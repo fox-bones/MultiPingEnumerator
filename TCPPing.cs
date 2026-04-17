@@ -1,0 +1,90 @@
+﻿using MultiPingEnumerator;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
+
+public class TCPPing
+{
+    public async Task StartPing(string ip, int port, int packetCount, IProgress<UpdateUI> packetStats, CancellationToken ct)
+    {
+        int successCount = 0;
+        int failureCount = 0;
+        double averageLatency = 0;
+        List<double> responseTimes = new List<double>();
+
+        // Stopwatch to measure response times
+        Stopwatch sw = Stopwatch.StartNew();
+
+        int i = 0;
+
+        // Loop until cancellation is requested or packet count is reached (0 means infinite)
+        while (!ct.IsCancellationRequested && (packetCount == 0 || i < packetCount))
+        {
+            i++;
+            sw.Restart();
+
+            try
+            {
+                using (TcpClient client = new TcpClient())
+                {
+                    var connectTask = client.ConnectAsync(ip, port);
+                    var delayTask = Task.Delay(2000, ct); // Timeout or User Cancel
+
+                    var completedTask = await Task.WhenAny(connectTask, delayTask);
+
+                    if (completedTask == connectTask && client.Connected)
+                    {
+                        sw.Stop();
+                        responseTimes.Add(sw.Elapsed.TotalMilliseconds);
+                        successCount++;
+                    }
+                    else
+                    {
+                        sw.Stop();
+                        failureCount++;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                sw.Stop();
+                break;
+            }
+            catch (SocketException)
+            {
+                sw.Stop();
+                failureCount++;
+            }
+            catch (Exception)
+            {
+                sw.Stop();
+                failureCount++;
+            }
+
+            averageLatency = responseTimes.Count > 0 ? responseTimes.Average() : 0;
+
+            // Reporting variable updates to UI on each loop
+            packetStats.Report(new UpdateUI
+            {
+                Success = successCount,
+                Failure = failureCount,
+                AverageLatency = averageLatency,
+                Health = ((double)successCount / i) * 100
+            });
+
+            // 1 second delay on each attempt, breaks if the "ct" parameter is cancelled during the delay
+            try
+            {
+                await Task.Delay(1000, ct);
+            }
+            catch (TaskCanceledException)
+            {
+                break;
+            }
+        }
+    }
+}
