@@ -12,10 +12,10 @@ namespace MultiPingEnumerator
         private int _failure;
         private double _latency;
         private double _health;
-        private string _isn1;
-        private string _isn2;
-        private string _isn3;
-        private string _isn4;
+        private string _isn1 = null;
+        private string _isn2 = null;
+        private string _isn3 = null;
+        private string _isn4 = null;
         private bool _isScanning = false;
         private string _pingMessage;
         private string _enumMessage;
@@ -27,8 +27,6 @@ namespace MultiPingEnumerator
             Failure = 0;
             AverageLatency = 0;
             Health = 0;
-            PingMessage = "";
-            EnumMessage = "";
 
             OnPropertyChanged(nameof(HealthDisplay));
             OnPropertyChanged(nameof(ArcEndPoint));
@@ -140,6 +138,9 @@ namespace MultiPingEnumerator
                 OnPropertyChanged(nameof(IsLargeArc));
                 OnPropertyChanged(nameof(HealthDisplay));
                 OnPropertyChanged(nameof(IsArcVisible));
+                OnPropertyChanged(nameof(ArcInnerEndPoint));
+                OnPropertyChanged(nameof(ArcCapX));
+                OnPropertyChanged(nameof(ArcCapY));
             }
         }
 
@@ -169,21 +170,59 @@ namespace MultiPingEnumerator
         {
             get
             {
-                // Assuming a 150x150 area with a radius of 69
-                double radius = 69;
-                double centerX = 75;
-                double centerY = 75;
-
+                double radius = 86;
+                double centerX = 100;
+                double centerY = 100;
                 double displayHealth = Math.Max(0.1, Math.Min(Health, 99.9));
-
-                // Map 0-100 to 0-360 degrees, then offset by -90 to start at the top
-                double angle = (displayHealth / 100.0) * 360.0 - 90.0;
-                double radians = angle * (Math.PI / 180.0);
-
+                double angleDeg = 180.0 - (displayHealth / 100.0) * 180.0;
+                double radians = angleDeg * (Math.PI / 180.0);
                 return new System.Windows.Point(
                     centerX + radius * Math.Cos(radians),
-                    centerY + radius * Math.Sin(radians)
-                );
+                    centerY - radius * Math.Sin(radians));
+            }
+        }
+
+        // Inner arc (r=78 instead of r=86) — same angle, slightly inward
+        public System.Windows.Point ArcInnerEndPoint
+        {
+            get
+            {
+                double radius = 78;
+                double centerX = 100;
+                double centerY = 100;
+                double displayHealth = Math.Max(0.1, Math.Min(Health, 99.9));
+                double angleDeg = 180.0 - (displayHealth / 100.0) * 180.0;
+                double radians = angleDeg * (Math.PI / 180.0);
+                return new System.Windows.Point(
+                    centerX + radius * Math.Cos(radians),
+                    centerY - radius * Math.Sin(radians));
+            }
+        }
+
+        // Cap dot translation — offset from its default top-left of (0,0) to the arc endpoint
+        public double ArcCapX
+        {
+            get
+            {
+                double radius = 86;
+                double centerX = 100;
+                double displayHealth = Math.Max(0.1, Math.Min(Health, 99.9));
+                double angleDeg = 180.0 - (displayHealth / 100.0) * 180.0;
+                double radians = angleDeg * (Math.PI / 180.0);
+                return centerX + radius * Math.Cos(radians);
+            }
+        }
+
+        public double ArcCapY
+        {
+            get
+            {
+                double radius = 86;
+                double centerY = 100;
+                double displayHealth = Math.Max(0.1, Math.Min(Health, 99.9));
+                double angleDeg = 180.0 - (displayHealth / 100.0) * 180.0;
+                double radians = angleDeg * (Math.PI / 180.0);
+                return centerY - radius * Math.Sin(radians);
             }
         }
 
@@ -208,7 +247,7 @@ namespace MultiPingEnumerator
         public Visibility ScanningVisibility => IsScanning ? Visibility.Visible : Visibility.Collapsed;
 
         // ArcSegment needs to know if the angle is > 180 degrees
-        public bool IsLargeArc => Health > 50;
+        public bool IsLargeArc => false;
 
         // Hide the arc when health is 0 to avoid small path at 0% health
         public Visibility IsArcVisible => Health > 0 ? Visibility.Visible : Visibility.Collapsed;

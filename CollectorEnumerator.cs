@@ -12,6 +12,56 @@ using System.Text;
 
 public class CollectorEnumerator
 {
+    public async Task<List<string>> GetCollectorsAsync(string ip, CancellationToken ct)
+    {
+        List<string> foundCollectors = new List<string>();
+        byte[] data = Encoding.ASCII.GetBytes("V5");
+
+        try
+        {
+            using (var client = new UdpClient())
+            {
+                // Send the "V5" request to the concentrator
+                await client.SendAsync(data, data.Length, ip, 16384);
+
+                var receiveTask = client.ReceiveAsync();
+                var timeoutTask = Task.Delay(2000, ct);
+
+                var completedTask = await Task.WhenAny(receiveTask, timeoutTask);
+
+                if (completedTask == receiveTask)
+                {
+                    var result = await receiveTask;
+                    string output = Encoding.ASCII.GetString(result.Buffer);
+
+                    // Standardize the response string
+                    output = output.Replace("V005", "").Replace("0000>", "").Trim();
+                    string[] array = output.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+                    if (array.Length > 0)
+                    {
+                        if (int.TryParse(array[0].TrimStart('0'), out int count))
+                        {
+                            for (int i = 0; i < count; i++)
+                            {
+                                if (i + 1 < array.Length)
+                                {
+                                    foundCollectors.Add(array[i + 1]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // If the UDP port is closed or times out, we return the empty list
+        }
+
+        return foundCollectors;
+    }
+
     public async Task Enumerate(string ip, IProgress<UpdateUI> packetStats, CancellationToken ct)
     {
         byte[] data = System.Text.Encoding.ASCII.GetBytes("V5");
@@ -41,35 +91,16 @@ public class CollectorEnumerator
                 string countString = array[0].TrimStart('0');
                 int count = int.TryParse(countString, out int val) ? val : 0;
 
-                for (int i = 0; i < count; i++)
+                packetStats.Report(new UpdateUI
                 {
-                    if (i + 1 < array.Length)
-                    {
-                        string isn = array[i + 1];
-                    }
-                    if (count == 1)
-                    {
-                        packetStats.Report(new UpdateUI
-                        {
-                            ISN1 = count > 0 ? $"ISN: {array[1]}" : "ISN: --",
-                            ISN2 = count > 1 ? $"ISN: {array[2]}" : "ISN: --",
-                            ISN3 = count > 2 ? $"ISN: {array[3]}" : "ISN: --",
-                            ISN4 = count > 3 ? $"ISN: {array[4]}" : "ISN: --",
-                            EnumMessage = $"Found {count} collector."
-                        });
-                    }
-                    else
-                    {
-                        packetStats.Report(new UpdateUI
-                        {
-                            ISN1 = count > 0 ? $"ISN: {array[1]}" : "ISN: --",
-                            ISN2 = count > 1 ? $"ISN: {array[2]}" : "ISN: --",
-                            ISN3 = count > 2 ? $"ISN: {array[3]}" : "ISN: --",
-                            ISN4 = count > 3 ? $"ISN: {array[4]}" : "ISN: --",
-                            EnumMessage = $"Found {count} collectors."
-                        });
-                    }
-                }
+                    ISN1 = count > 0 && array.Length > 1 ? array[1] : "--",
+                    ISN2 = count > 1 && array.Length > 2 ? array[2] : "--",
+                    ISN3 = count > 2 && array.Length > 3 ? array[3] : "--",
+                    ISN4 = count > 3 && array.Length > 4 ? array[4] : "--",
+                    EnumMessage = count == 1
+                        ? "Found 1 collector."
+                        : $"Found {count} collector(s)."
+                });
             }
         }
     }
